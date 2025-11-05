@@ -17,8 +17,8 @@ import (
 )
 
 func TestListQueries(t *testing.T) {
-	d, close := testDB(t)
-	defer close()
+	d, closeDB := testDB(t)
+	defer closeDB() //nolint:errcheck
 	j := &Jobber{
 		client: http.DefaultClient,
 		logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
@@ -37,8 +37,8 @@ func TestListQueries(t *testing.T) {
 }
 
 func TestNewQuery(t *testing.T) {
-	d, close := testDB(t)
-	defer close()
+	d, closeDB := testDB(t)
+	defer closeDB() //nolint:errcheck
 	j := &Jobber{
 		client: http.DefaultClient,
 		logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
@@ -55,7 +55,6 @@ func TestNewQuery(t *testing.T) {
 	})
 	if query.Keywords != wantKeywords {
 		t.Errorf("expected keywords '%s', got %s", wantKeywords, query.Keywords)
-
 	}
 	if query.Location != wantLocation {
 		t.Errorf("expected location '%s', got %s", wantLocation, query.Location)
@@ -72,8 +71,8 @@ func TestNewQuery(t *testing.T) {
 }
 
 func TestRunQuery(t *testing.T) {
-	d, close := testDB(t)
-	defer close()
+	d, closeDB := testDB(t)
+	defer closeDB() //nolint:errcheck
 	j := &Jobber{
 		client: &http.Client{Transport: newMockResp(t)},
 		logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
@@ -89,7 +88,7 @@ func TestRunQuery(t *testing.T) {
 	if len(offers) != 11 {
 		t.Errorf("expected 11 offer, got %d", len(offers))
 	}
-	if offers[0].ID != "existing_offer" {
+	if offers[len(offers)-1].ID != "existing_offer" {
 		t.Errorf("expected ID 'existing_offer', got %s", offers[0].ID)
 	}
 }
@@ -132,12 +131,12 @@ func TestFetchOffers(t *testing.T) {
 	}
 	file, err := os.Open("example.html")
 	if err != nil {
-		log.Fatalf("failed to open file: %s", err.Error())
+		t.Fatalf("failed to open file: %s", err.Error())
 	}
 	defer file.Close()
 	want, err := io.ReadAll(file)
 	if err != nil {
-		log.Fatalf("failed to read example.html file: %s", err.Error())
+		t.Fatalf("failed to read example.html file: %s", err.Error())
 	}
 	if len(want) != len(mockResp.respBody) {
 		t.Errorf("expected response body length to be %d, got %d", len(want), len(mockResp.respBody))

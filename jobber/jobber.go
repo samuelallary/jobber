@@ -57,11 +57,11 @@ func (j *Jobber) RunQuery(query *db.Query) []*db.Offer {
 
 	// Fetch offers
 	resp, err := j.fetchOffers(query)
-	defer resp.Close()
 	if err != nil {
 		j.logger.Error("fetchOffers in jobber.RunQuery", slog.String("error", err.Error()))
 		return []*db.Offer{}
 	}
+	defer resp.Close()
 
 	// Parse results
 	newOffers, err := j.parseLinkedinBody(resp, query.ID)
@@ -142,7 +142,7 @@ func (j *Jobber) parseLinkedinBody(body io.ReadCloser, queryID int64) ([]db.Crea
 	}
 
 	// Find all job listings
-	doc.Find("li").Each(func(i int, s *goquery.Selection) {
+	doc.Find("li").Each(func(_ int, s *goquery.Selection) {
 		// Check if this li contains a job card
 		if s.Find(".base-search-card").Length() > 0 {
 			job := db.CreateOfferParams{QueryID: queryID}
