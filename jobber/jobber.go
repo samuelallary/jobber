@@ -26,7 +26,7 @@ type Jobber struct {
 	db     *db.Queries
 }
 
-func (j *Jobber) New(log *slog.Logger, db *db.Queries) *Jobber {
+func New(log *slog.Logger, db *db.Queries) *Jobber {
 	return &Jobber{
 		client: &http.Client{Timeout: 10 * time.Second},
 		logger: log,
