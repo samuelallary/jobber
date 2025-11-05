@@ -78,6 +78,9 @@ FROM
     offers
 WHERE
     query_id = ?
+    AND ignored = 0
+ORDER BY
+    posted_at DESC
 `
 
 func (q *Queries) ListOffers(ctx context.Context, queryID int64) ([]*Offer, error) {

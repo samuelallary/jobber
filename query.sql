@@ -10,7 +10,10 @@ SELECT
 FROM
     offers
 WHERE
-    query_id = ?;
+    query_id = ?
+    AND ignored = 0
+ORDER BY
+    posted_at DESC;
 
 -- name: CreateQuery :one
 INSERT INTO
