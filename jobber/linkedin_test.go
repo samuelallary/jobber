@@ -93,7 +93,7 @@ func TestParseLinkedInBody(t *testing.T) {
 	}
 }
 
-func TestRunQuery(t *testing.T) {
+func TestSearch(t *testing.T) {
 	mockResp := newLinkedInMockResp(t)
 	l := &linkedIn{
 		client: &http.Client{Transport: mockResp},
@@ -103,7 +103,7 @@ func TestRunQuery(t *testing.T) {
 		Keywords: "golang",
 		Location: "the moon",
 	}
-	offers, err := l.runQuery(query)
+	offers, err := l.search(query)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

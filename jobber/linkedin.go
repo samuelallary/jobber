@@ -43,18 +43,21 @@ func NewLinkedIn(logger *slog.Logger) *linkedIn {
 	}
 }
 
-func (l *linkedIn) runQuery(query *db.Query) ([]db.CreateOfferParams, error) {
+// search runs a linkedin search based on a query.
+// It will paginate over the search results until it doesn't find any more offers,
+// scrape the data and return a slice of offers ready to be added to the DB.
+func (l *linkedIn) search(query *db.Query) ([]db.CreateOfferParams, error) {
 	var totalOffers []db.CreateOfferParams
 	var offers []db.CreateOfferParams
 
 	for i := 0; i == 0 || len(offers) == searchInterval; i += searchInterval {
 		resp, err := l.fetchOffersPage(query, i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetchOffersPage in runQuery: %v", err)
+			return nil, fmt.Errorf("failed to fetchOffersPage in linkedIn.search: %v", err)
 		}
 		offers, err = l.parseLinkedInBody(resp)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parseLinkedInBody body runQuery: %v", err)
+			return nil, fmt.Errorf("failed to parseLinkedInBody body linkedIn.search: %v", err)
 		}
 		totalOffers = append(totalOffers, offers...)
 	}
