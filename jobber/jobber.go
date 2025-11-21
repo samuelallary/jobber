@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/Alvaroalonsobabbel/jobber/db"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/google/uuid"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -20,27 +21,34 @@ type Jobber struct {
 	linkedIn *linkedIn
 	logger   *slog.Logger
 	db       *db.Queries
-	wg       sync.WaitGroup
+	sched    gocron.Scheduler
+	schedMap map[int64]uuid.UUID
 }
 
-func New(ctx context.Context, log *slog.Logger, db *db.Queries) (*Jobber, func()) {
+func New(log *slog.Logger, db *db.Queries) (*Jobber, func() error) {
 	j := &Jobber{
-		ctx:      ctx,
+		ctx:      context.Background(),
 		linkedIn: NewLinkedIn(log),
 		logger:   log,
 		db:       db,
-		wg:       sync.WaitGroup{},
+		schedMap: make(map[int64]uuid.UUID),
 	}
-
-	// Schedule the existing queries upon start.
-	queries, err := j.db.ListQueries(ctx)
+	s, err := gocron.NewScheduler()
 	if err != nil {
-		log.Error("failed to list queries in jobber.New", slog.String("error", err.Error()))
+		log.Error("failed to create scheduler", slog.String("error", err.Error()))
+	}
+	j.sched = s
+
+	queries, err := j.db.ListQueries(j.ctx)
+	if err != nil {
+		j.logger.Error("unable to list queries in jobber.scheduleQueries", slog.String("error", err.Error()))
 	}
 	for _, q := range queries {
-		go j.scheduleQuery(q)
+		j.scheduleQuery(q)
 	}
-	return j, j.wg.Wait // TODO: improve flaky shutdown strategy.
+	s.Start()
+
+	return j, j.sched.Shutdown
 }
 
 func (j *Jobber) CreateQuery(keywords, location string) (*db.Query, error) {
@@ -71,11 +79,16 @@ func (j *Jobber) CreateQuery(keywords, location string) (*db.Query, error) {
 
 	// After creating a new query we run it so the feed has initial data.
 	// In the frontend we use a spinner with htmx while this is being processed.
-	j.runQuery(query)
+	j.runQuery(query.ID)
+
+	j.scheduleQuery(query)
 
 	return query, nil
 }
 
+// ListOffers return the list of offers posted in the last 7 days for a
+// given query's keywords and location.
+// If the query doesn't exist, a sql.ErrNoRows will be returned.
 func (j *Jobber) ListOffers(keywords, location string) ([]*db.Offer, error) {
 	q, err := j.db.GetQuery(j.ctx, &db.GetQueryParams{
 		Keywords: keywords,
@@ -93,13 +106,23 @@ func (j *Jobber) ListOffers(keywords, location string) ([]*db.Offer, error) {
 	})
 }
 
-func (j *Jobber) runQuery(q *db.Query) {
+func (j *Jobber) runQuery(qID int64) {
+	q, err := j.db.GetQueryByID(j.ctx, qID)
+	if err != nil {
+		j.logger.Error("unable to get query in jobber.runQuery", slog.Int64("queryID", qID), slog.String("error", err.Error()))
+		return
+	}
+
 	// We remove queries that haven't been used for longer than 7 days.
 	if time.Since(q.QueriedAt) > time.Hour*24*7 {
 		if err := j.db.DeleteQuery(j.ctx, q.ID); err != nil {
 			j.logger.Error("unable to delete query in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
-			return
 		}
+		if err := j.sched.RemoveJob(j.schedMap[qID]); err != nil {
+			j.logger.Error("unable to remove job from scheduler in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
+		}
+		delete(j.schedMap, qID)
+
 		j.logger.Info("deleting unused query", slog.Int64("queryID", q.ID), slog.String("keywords", q.Keywords), slog.String("location", q.Location))
 		return
 	}
@@ -112,51 +135,35 @@ func (j *Jobber) runQuery(q *db.Query) {
 	if len(offers) > 0 {
 		for _, o := range offers {
 			if err := j.db.CreateOffer(j.ctx, &o); err != nil {
-				j.logger.Error("unable to create offer in jobber.runQuery", slog.String("error", err.Error()))
+				j.logger.Error("unable to create offer in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
 				continue
 			}
 			if err := j.db.CreateQueryOfferAssoc(j.ctx, &db.CreateQueryOfferAssocParams{
 				QueryID: q.ID,
 				OfferID: o.ID,
 			}); err != nil {
-				j.logger.Error("unable to create query offer association in jobber.runQuery", slog.String("error", err.Error()))
+				j.logger.Error("unable to create query offer association in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
 			}
 		}
 	}
+
 	if err := j.db.UpdateQueryUAT(j.ctx, q.ID); err != nil {
 		j.logger.Error("unable to update query timestamp in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
 	}
 
-	// Schedule the next run.
-	go j.scheduleQuery(q.ID)
+	j.logger.Info("jobber.runQuery successfully completed query", slog.Int64("queryID", q.ID))
 }
 
-func (j *Jobber) scheduleQuery(qID int64) {
-	j.wg.Add(1)
-	defer j.wg.Done()
-
-	q, err := j.db.GetQueryByID(j.ctx, qID)
+func (j *Jobber) scheduleQuery(q *db.Query) {
+	cron := fmt.Sprintf("%d * * * *", q.CreatedAt.Minute())
+	job, err := j.sched.NewJob(
+		gocron.CronJob(cron, false),
+		gocron.NewTask(func(q int64) { j.runQuery(q) }, q.ID),
+	)
 	if err != nil {
-		j.logger.Error("unable to get query in jobber.scheduleQuery", slog.Int64("queryID", qID), slog.String("error", err.Error()))
+		j.logger.Error("unable to schedule query in jobber.scheduleQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
 		return
 	}
-
-	// delay := time.Hour
-	// if q.UpdatedAt.Valid {
-	// 	minuteOffset := time.Duration(q.UpdatedAt.Time.Minute()) * time.Minute
-	// 	now := time.Now()
-	// 	nextRun := now.Truncate(time.Hour).Add(time.Hour).Add(minuteOffset)
-	// 	delay = nextRun.Sub(now)
-	// }
-	delay := 2 * time.Minute
-
-	j.logger.Info("scheduling query", slog.Int64("queryID", q.ID), slog.Time("at", time.Now().Add(delay)))
-
-	select {
-	case <-time.After(delay):
-		j.runQuery(q)
-	case <-j.ctx.Done():
-		j.logger.Info("scheduled query cancelled in jobber.scheduleQuery", slog.Int64("queryID", q.ID))
-		return
-	}
+	j.schedMap[q.ID] = job.ID()
+	j.logger.Info("scheduled query", slog.Int64("queryID", q.ID), slog.String("cron", cron), slog.Any("jobID", job.ID()))
 }
