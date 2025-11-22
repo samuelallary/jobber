@@ -48,7 +48,7 @@ func New(l *slog.Logger, j *jobber.Jobber) *http.Server {
 
 func (s *server) create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: make params mandatory to avoid blank quries
+		// TODO: make params mandatory to avoid blank quries and normalized them
 		k := r.FormValue(queryParamKeywords)
 		l := r.FormValue(queryParamLocation)
 		q, err := s.jobber.CreateQuery(k, l)
@@ -57,10 +57,15 @@ func (s *server) create() http.HandlerFunc {
 			http.Error(w, "failed to create query", http.StatusInternalServerError)
 			return
 		}
-
-		// TODO: do this with url.Encode
+		// TODO: Refactor
 		url := fmt.Sprintf("https://%s/feeds?keywords=%s&location=%s", r.Host, q.Keywords, q.Location)
-		_, err = w.Write([]byte(html.EscapeString(url)))
+		response := fmt.Sprintf(`<p>RSS Feed Created Successfully!</p>
+<p>
+  <a href="%s" target="_blank">%s</a>
+  <button class="copy-button" onclick="copyToClipboard('%s')">Copy URL</button>
+</p>
+<p><a href="/">Create Another Feed</a></p>`, html.EscapeString(url), html.EscapeString(url), html.EscapeString(url))
+		_, err = w.Write([]byte(response))
 		if err != nil {
 			s.logger.Error("failed to write response", slog.String("url", url), slog.String("error", err.Error()))
 		}
