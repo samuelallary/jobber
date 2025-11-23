@@ -1,6 +1,7 @@
 package jobber
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -21,22 +22,27 @@ func TestCreateQuery(t *testing.T) {
 	defer jCloser()
 
 	t.Run("creates a query", func(t *testing.T) {
-		q, err := j.CreateQuery("cuak", "squeek")
-		if err != nil {
+		k := "cuak"
+		l := "squeek"
+		if err := j.CreateQuery(k, l); err != nil {
 			t.Fatalf("failed to create query: %s", err)
 		}
-		if q.Keywords != "cuak" {
-			t.Errorf("expected keywords to be 'cuak', got %s", q.Keywords)
+		q, err := d.GetQuery(context.Background(), &db.GetQueryParams{Keywords: k, Location: l})
+		if err != nil {
+			t.Errorf("failed to get query: %s", err)
 		}
-		if q.Location != "squeek" {
-			t.Errorf("expected location to be 'squeek', got %s", q.Location)
+		if q.Keywords != k {
+			t.Errorf("expected keywords to be '%s', got %s", k, q.Keywords)
+		}
+		if q.Location != l {
+			t.Errorf("expected location to be '%s', got %s", l, q.Location)
 		}
 		if len(j.sched.Jobs()) != 4 { // 3 from the seed + the recently created.
 			t.Errorf("expected number of jobs to be 4, got %d", len(j.sched.Jobs()))
 		}
 		time.Sleep(50 * time.Millisecond)
 		for _, jb := range j.sched.Jobs() {
-			if slices.Contains(jb.Tags(), q.Keywords+q.Location) {
+			if slices.Contains(jb.Tags(), k+l) {
 				lr, _ := jb.LastRun() //nolint: errcheck
 				if lr.Before(time.Now().Add(-time.Second)) {
 					t.Errorf("expected created query to have been performed immediately, got %v", lr)
@@ -46,18 +52,18 @@ func TestCreateQuery(t *testing.T) {
 	})
 
 	t.Run("on existing query it returns the existing one", func(t *testing.T) {
-		q, err := j.CreateQuery("golang", "Berlin")
-		if err != nil {
+		if err := j.CreateQuery("golang", "berlin"); err != nil {
 			t.Fatalf("failed to create existing query: %s", err)
 		}
-		if q.ID != 5 {
-			t.Errorf("expected query ID to be 5, got %d", q.ID)
+		q, err := d.ListQueries(context.Background())
+		if err != nil {
+			t.Fatalf("failed to list queries: %s", err)
 		}
-		if q.Keywords != "golang" {
-			t.Errorf("expected keywords to be 'golang', got %s", q.Keywords)
+		if len(q) != 4 { // 3 from the seed + last test.
+			t.Errorf("expected number of queries to be 4, got %d", len(q))
 		}
-		if q.Location != "Berlin" {
-			t.Errorf("expected location to be 'Berlin', got %s", q.Location)
+		if len(j.sched.Jobs()) != 4 { // 3 from the seed + last test.
+			t.Errorf("expected number of jobs to be 4, got %d", len(j.sched.Jobs()))
 		}
 	})
 }

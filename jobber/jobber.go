@@ -62,25 +62,20 @@ func NewConfigurableJobber(log *slog.Logger, db *db.Queries, s scrape.Scraper) (
 	}
 }
 
-func (j *Jobber) CreateQuery(keywords, location string) (*db.Query, error) {
+// CreateQuery creates a new query and schedules it.
+// If the query already exists the creation will be ignored.
+func (j *Jobber) CreateQuery(keywords, location string) error {
 	query, err := j.db.CreateQuery(j.ctx, &db.CreateQueryParams{
 		Keywords: keywords,
 		Location: location,
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		// If the query exist we return the existing query.
-		eq, err := j.db.GetQuery(j.ctx, &db.GetQueryParams{
-			Keywords: keywords,
-			Location: location,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get query: %w", err)
-		}
-		return eq, nil
+		// If the query exist we return no error.
+		return nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create query: %w", err)
+		return fmt.Errorf("failed to create query: %w", err)
 	}
 	j.logger.Info("created new query",
 		slog.Int64("queryID", query.ID),
@@ -88,11 +83,12 @@ func (j *Jobber) CreateQuery(keywords, location string) (*db.Query, error) {
 		slog.String("location", location),
 	)
 
-	// After creating a new query we run it so the feed has initial data.
-	// In the frontend we use a spinner with htmx while this is being processed.
+	// After creating a new query we schedule it and run it immediately
+	// so the feed has initial data. In the frontend we use a spinner
+	// with htmx while this is being processed.
 	j.scheduleQuery(query, true)
 
-	return query, nil
+	return nil
 }
 
 // ListOffers return the list of offers posted in the last 7 days for a
