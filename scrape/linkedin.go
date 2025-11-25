@@ -20,7 +20,7 @@ const (
 	paramKeywords    = "keywords" // Search keywords, ie. "golang"
 	paramLocation    = "location" // Location of the search, ie. "Berlin"
 	paramStart       = "start"    // Start of the pagination, in intervals of 10s, ie. "10"
-	paramFTPR        = "f_TPR"    // Time Posted Range, ie. r86400 = Past 24 hours
+	paramFTPR        = "f_TPR"    // Time Posted Range. Values are in seconds, starting with 'r', ie. r86400 = Past 24 hours
 	searchInterval   = 10         // LinkedIn pagination interval
 	oneWeekInSeconds = 604800
 )
@@ -64,16 +64,14 @@ func (l *linkedIn) Scrape(query *db.Query) ([]db.CreateOfferParams, error) {
 func (l *linkedIn) fetchOffersPage(query *db.Query, start int) (io.ReadCloser, error) {
 	qp := url.Values{}
 	qp.Add(paramKeywords, query.Keywords)
-	if query.Location != "" {
-		qp.Add(paramLocation, query.Location)
-	}
+	qp.Add(paramLocation, query.Location)
 	if start != 0 {
 		qp.Add(paramStart, strconv.Itoa(start))
 	}
 
 	ftpr := oneWeekInSeconds
 	// UpdatedAt is updated every time we run the query against LinkedIn.
-	// If the query has a valid UpdateAt field we don't use the default FTPR
+	// If the query has a valid UpdateAt field we don't use the default f_TPR
 	// value (a week) but the time difference between the last query and now.
 	if query.UpdatedAt.Valid {
 		ftpr = int(time.Since(query.UpdatedAt.Time).Seconds())
@@ -147,6 +145,7 @@ func (l *linkedIn) parseLinkedInBody(body io.ReadCloser) ([]db.CreateOfferParams
 	return jobs, nil
 }
 
+// normalize removes newlines and trims whitespace from a string.
 func normalize(s string) string {
 	str := strings.Split(s, "\n")
 	for i, v := range str {
