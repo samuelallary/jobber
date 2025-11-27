@@ -153,7 +153,7 @@ func (j *Jobber) runQuery(qID int64) {
 		j.logger.Error("unable to update query timestamp in jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("error", err.Error()))
 	}
 
-	j.logger.Info("jobber.runQuery successfully completed query", slog.Int64("queryID", q.ID))
+	j.logger.Info("successfuly completed jobber.runQuery", slog.Int64("queryID", q.ID), slog.String("keywords", q.Keywords), slog.String("location", q.Location))
 }
 
 func (j *Jobber) scheduleQuery(q *db.Query, immediately bool) {
