@@ -57,9 +57,11 @@
         </style>
     </head>
     <body>
+      <p style="text-align: center"><b>jobber</b> - dynamic job search RSS feed generator<br>-<br>
+          <i>create your feed<br>wait for the offers to come<br>apply for the jobs</i><br>-</p>
+        <br />
         <div class="centered-form">
-            <p>Bring them jobs to me!</p>
-
+            <p>create a new RSS feed...</p>
             <div id="content" class="spinner htmx-indicator">
                 <form
                     style="display: inline"
@@ -71,19 +73,27 @@
                     <input
                         type="text"
                         name="keywords"
-                        placeholder="Keywords"
+                        placeholder="keywords, ie. barista"
                         required
                     />
-                    <input type="text" name="location" placeholder="Location" />
-                    <button type="submit">Create RSS Feed</button>
+                    <input type="text" name="location" placeholder="location, ie. berlin" />
+                    <button type="submit">create RSS feed</button>
                 </form>
             </div>
             <p class="spinner htmx-indicator">Loading...</p>
         </div>
 
+        <p style="text-align: center"><b>good to know...</b><br>
+            jobs from LinkedIn only (for now)<br>
+            feeds are refreshed hourly<br>
+            unused feeds are deleted after a week<br></p>
+          <br />
+
         <footer>
-            <br />
-            <p style="text-align: center">- jobber -</p>
+            <p style="text-align: center">- this website does not use cookies, <i>hooray! -</i><br>- jobber v0.1 -<br>
+            <a href="github.com/Alvaroalonsobabbel/jobber"><img src="data:image/png;base64,{{template "github-logo.base64"}}" width="15" height="15" /></a>
+
+            </p>
         </footer>
 
         <script>
