@@ -166,7 +166,7 @@ func TestRunQuery(t *testing.T) {
 				t.Errorf("wanted the query initial UpdatedAt value to be before the new value")
 			}
 		})
-		// Test adding offer and ignoring existing offer
+		// TODO: test adding offer and ignoring existing offer
 	})
 
 	t.Run("with older than 7 days query deletes the query", func(t *testing.T) {
