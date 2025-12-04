@@ -1,4 +1,4 @@
-.PHONY: check test lint migrate-up migrate-down
+.PHONY: check test lint migrate-up migrate-down init logfile compose-up
 
 # https://github.com/golang-migrate/migrate/blob/master/database/postgres/TUTORIAL.md
 migrate-up:
@@ -14,3 +14,11 @@ test:
 
 lint:
 	@golangci-lint run
+
+init: logfile compose-up migrate-up
+
+logfile:
+	@touch jobber.log
+
+compose-up:
+	@docker compose up -d
