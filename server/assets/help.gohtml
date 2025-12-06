@@ -17,8 +17,18 @@
     details[open] > summary::before {
         content: '▿ ';
     }
+    p {
+        text-align: center;
+        max-width: 450px;
+        margin: 0 auto;
+    }
     </style>
-    <p style="text-align: center; max-width:450px; margin:0 auto;"><b>get started in four steps</b><br>
+    <br>
+    <p><b>what is this?</b><br>
+        this is a simple tool to create RSS job search feeds from job portals (ie. LinkedIn), so you can get the latest job offers directly in your RSS reader
+    </p>
+    <br>
+    <p><b>get started in four steps</b><br>
     1 - install an RSS reader (see reader recommendations)<br>
     2 - create your job search feed <a href="/">here</a><br>
     3 - subscribe to the feed in your RSS reader using the url from step 2<br>
@@ -26,13 +36,15 @@
     <br>
     <details>
     <summary><b>reader recommendations</b></summary>
-    <p style="text-align: center; max-width:450px; margin:0 auto;">
+    <p>
     <b><a href="https://feeder.co/">feeder.co</a>:</b> (browser extension / iOS / Android app) free without account for browser extension. free with account iOS / Android<br>
     <b><a href="https://www.vienna-rss.com/">vienna</a>:</b> (macOS) free and no account required. macOS only<br>
     <b><a href="https://rssmobile.app/">rss mobile</a>:</b> (iOS) free and no account required. iOS only<br></p>
     <p>do you have any reader recommendation? send it to <i>hello@rssjobs.app</i>!</p>
     </details>
-    <p style="text-align: center"><b>FAQ</b></p>
+     <br>
+    <details>
+    <summary><b>FAQ</b></summary>
     <details>
     <summary>why RSS?</summary>
     it's a boring, old, minimalistic technology that does the job
@@ -65,7 +77,8 @@
     <summary>but who's profiting?</summary>
     you!
     </details>
+    </details>
     <br>
-    <p style="text-align: center; max-width:450px; margin:0 auto;">do you have any feedback, questions or comments? I'd be happy to hear them! send them to <i>hello@rssjobs.app</i></p>
+    <p>do you have any feedback, questions or comments? I'd be happy to hear them! send them to <i>hello@rssjobs.app</i></p>
 </main>
 {{template "bottom" .}}
