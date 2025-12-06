@@ -27,6 +27,7 @@ const (
 	// Assets.
 	assetsGlob          = "assets/*"
 	assetIndex          = "index.gohtml"
+	assetHelp           = "help.gohtml"
 	assetRSS            = "rss.goxml"
 	assetCreateResponse = "create_response.gohtml"
 )
@@ -57,6 +58,7 @@ func New(l *slog.Logger, j *jobber.Jobber) (*http.Server, error) {
 	mux.Handle("GET /feeds", s.withMetrics(s.feed()))
 	mux.Handle("POST /feeds", s.withMetrics(s.create()))
 	mux.Handle("GET /metrics", promhttp.Handler())
+	mux.HandleFunc("GET /help", s.help())
 	mux.HandleFunc("/", s.index())
 
 	return &http.Server{
@@ -74,6 +76,15 @@ func (s *server) index() http.HandlerFunc {
 		}
 		if err := s.templates.ExecuteTemplate(w, assetIndex, nil); err != nil {
 			s.internalError(w, "failed to execute template in server.index", err)
+			return
+		}
+	}
+}
+
+func (s *server) help() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if err := s.templates.ExecuteTemplate(w, assetHelp, nil); err != nil {
+			s.internalError(w, "failed to execute template in server.help", err)
 			return
 		}
 	}
