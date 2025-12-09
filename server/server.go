@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -35,9 +36,13 @@ const (
 //go:embed assets/*
 var assets embed.FS
 
-var requestDuration = prometheus.NewHistogramVec(
-	prometheus.HistogramOpts{Name: "http_request_duration_seconds"},
-	[]string{"code", "method"},
+var httpRequests = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "http_requests_seconds",
+		Help:    "Duration, method, path, code.",
+		Buckets: prometheus.DefBuckets,
+	},
+	[]string{"method", "path", "code"},
 )
 
 type server struct {
@@ -47,7 +52,7 @@ type server struct {
 }
 
 func New(l *slog.Logger, j *jobber.Jobber) (*http.Server, error) {
-	prometheus.MustRegister(requestDuration)
+	prometheus.MustRegister(httpRequests)
 
 	t, err := template.New("").Funcs(funcMap).ParseFS(assets, assetsGlob)
 	if err != nil {
@@ -55,15 +60,15 @@ func New(l *slog.Logger, j *jobber.Jobber) (*http.Server, error) {
 	}
 	s := &server{logger: l, jobber: j, templates: t}
 	mux := http.NewServeMux()
-	mux.Handle("GET /feeds", s.withMetrics(s.feed()))
-	mux.Handle("POST /feeds", s.withMetrics(s.create()))
+	mux.HandleFunc("GET /feeds", s.feed())
+	mux.HandleFunc("POST /feeds", s.create())
 	mux.Handle("GET /metrics", promhttp.Handler())
 	mux.HandleFunc("GET /help", s.help())
 	mux.HandleFunc("/", s.index())
 
 	return &http.Server{
 		Addr:              ":80",
-		Handler:           mux,
+		Handler:           MetricsMiddleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}, nil
 }
@@ -160,8 +165,24 @@ func (s *server) internalError(w http.ResponseWriter, msg string, err error) {
 	http.Error(w, "it's not you it's me", http.StatusInternalServerError)
 }
 
-func (s *server) withMetrics(next http.Handler) http.Handler {
-	return promhttp.InstrumentHandlerDuration(requestDuration, next)
+func MetricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, code: 200}
+		next.ServeHTTP(rec, r)
+		d := time.Since(start).Seconds()
+		httpRequests.WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(rec.code)).Observe(d)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	code int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.code = code
+	r.ResponseWriter.WriteHeader(code)
 }
 
 // validateParams receives a list of params, validate they've

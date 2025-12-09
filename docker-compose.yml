@@ -51,6 +51,20 @@ services:
     networks:
       - jobber-network
 
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    volumes:
+      - ./grafana.yml:/etc/grafana/provisioning/datasources/datasource.yaml
+      - ./grafana-data:/var/lib/grafana
+    ports:
+      - 3000:3000
+    networks:
+      - jobber-network
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password
+
 networks:
   jobber-network:
     driver: bridge
