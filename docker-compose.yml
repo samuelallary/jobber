@@ -27,12 +27,12 @@ services:
       DB_HOST: postgres
     ports:
       - "80:80"
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - jobber-network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:latest
@@ -48,6 +48,8 @@ services:
     restart: unless-stopped
     networks:
       - jobber-network
+    depends_on:
+      - loki
 
   grafana:
     container_name: grafana
@@ -63,6 +65,8 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_BASIC_ENABLED=false
+    depends_on:
+      - prometheus
 
   alloy:
     image: grafana/alloy:latest
@@ -74,9 +78,6 @@ services:
       - 4318:4318
     networks:
       - jobber-network
-    depends_on:
-      jobber:
-        condition: service_started
     environment:
       ALLOY_DEPLOY_MODE: docker
     volumes:
@@ -92,6 +93,8 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/kmsg
+    depends_on:
+      - jobber
 
   loki:
     image: grafana/loki:latest
@@ -104,8 +107,7 @@ services:
     networks:
       - jobber-network
     depends_on:
-      jobber:
-        condition: service_started
+      - jobber
 
 networks:
   jobber-network:
