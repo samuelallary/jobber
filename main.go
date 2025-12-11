@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,68 +19,51 @@ import (
 
 func main() {
 	var (
+		log    = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 		ctx    = context.Background()
-		svrErr = make(chan error, 1)
+		svrErr = make(chan error)
 		c      = make(chan os.Signal, 1)
 	)
 
-	logger, logCloser := initLogger()
-	defer logCloser()
-
-	d, dbCloser := initDB(ctx)
+	d, dbCloser := initDB(ctx, log)
 	defer dbCloser()
 
-	j, jCloser := jobber.New(logger, d)
+	j, jCloser := jobber.New(log, d)
 	defer jCloser()
 
-	svr, err := server.New(logger, j)
+	svr, err := server.New(log, j)
 	if err != nil {
-		log.Println("unable to create server: " + err.Error())
+		log.Error("unable to create server", slog.Any("error", err))
 		return
 	}
 	defer func() {
 		if err := svr.Shutdown(ctx); err != nil {
-			log.Println("unable to shutdown server: " + err.Error())
+			log.Error("unable to shutdown server", slog.Any("error", err))
 		}
 	}()
 
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		log.Println("starting server in port " + svr.Addr)
+		log.Info("starting server", slog.String("addr", svr.Addr))
 		if err := svr.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
-				log.Println(err)
+				log.Info("server closed", slog.Any("msg", err))
 			} else {
-				log.Println(err)
 				svrErr <- err
 			}
 		}
 	}()
 
 	select {
-	case <-svrErr:
-		log.Println("\nserver error, shutting down...")
+	case e := <-svrErr:
+		log.Error("server error, shutting down...", slog.Any("error", e))
 	case <-c:
-		log.Println("\nshutting down...")
+		log.Info("shutting down...")
 	}
 }
 
-func initLogger() (*slog.Logger, func()) {
-	out, err := os.OpenFile("jobber.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("unable to open log file: %v", err)
-	}
-
-	handler := slog.NewJSONHandler(out, &slog.HandlerOptions{Level: slog.LevelDebug})
-	return slog.New(handler), func() {
-		if err := out.Close(); err != nil {
-			log.Printf("unable to close log file: %v", err)
-		}
-	}
-}
-
-func initDB(ctx context.Context) (*db.Queries, func()) {
+func initDB(ctx context.Context, log *slog.Logger) (*db.Queries, func()) {
 	host := os.Getenv("DB_HOST")
 	if host == "" {
 		host = "localhost"
@@ -89,10 +71,10 @@ func initDB(ctx context.Context) (*db.Queries, func()) {
 	connStr := fmt.Sprintf("host=%s user=jobber password=%s dbname=jobber sslmode=disable", host, os.Getenv("POSTGRES_PASSWORD"))
 	conn, err := pgxpool.New(ctx, connStr)
 	if err != nil {
-		log.Fatalf("unable to initialized db connection: %v", err)
+		log.Error("unable to initialized db connection", slog.Any("error", err))
 	}
 	if err := conn.Ping(ctx); err != nil {
-		log.Fatalf("unable to ping database: %v", err)
+		log.Error("unable to ping database", slog.Any("error", err))
 	}
 
 	return db.New(conn), conn.Close
