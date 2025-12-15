@@ -2,3 +2,4 @@
 jobber.log
 postgres-data
 prometheus-data
+grafana-data
