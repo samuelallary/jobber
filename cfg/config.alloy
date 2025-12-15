@@ -1,41 +1,4 @@
-// ###############################
-// #### Metrics Configuration ####
-// ###############################
-
-// Host Cadvisor on the Docker socket to expose container metrics.
-prometheus.exporter.cadvisor "example" {
-  docker_only = true
-}
-
-discovery.relabel "example" {
-    targets = prometheus.exporter.cadvisor.example.targets
-
-    rule {
-        target_label = "job"
-        replacement  = "integrations/docker"
-    }
-
-    rule {
-        target_label = "instance"
-        replacement  = constants.hostname
-    }
-}
-
-// Configure a prometheus.scrape component to collect cadvisor metrics.
-prometheus.scrape "scraper" {
-  targets    = discovery.relabel.example.output
-  forward_to = [ prometheus.remote_write.demo.receiver ]
-
-
-  scrape_interval = "10s"
-}
-
-// Configure a prometheus.remote_write component to send metrics to a Prometheus server.
-prometheus.remote_write "demo" {
-  endpoint {
-    url = "http://prometheus:9090/api/v1/write"
-  }
-}
+// TODO: add container metrics
 
 // ###############################
 // #### Logging Configuration ####
@@ -46,23 +9,21 @@ discovery.docker "linux" {
   host = "unix:///var/run/docker.sock"
 }
 
-// Define a relabeling rule to create a service name from the container name.
+// Define a relabeling rule to create a service name from the container name for logs.
 discovery.relabel "logs_integrations_docker" {
-      targets = []
+  targets = []
 
-      rule {
-          source_labels = ["__meta_docker_container_name"]
-          regex = "/(.*)"
-          target_label = "container_name"
-      }
-
-     rule {
-        target_label = "instance"
-        replacement  = constants.hostname
-    }
-
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex = "/(.*)"
+    target_label = "container_name"
   }
 
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+}
 
 // Configure a loki.source.docker component to collect logs from Docker containers.
 loki.source.docker "default" {
