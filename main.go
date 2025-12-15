@@ -20,7 +20,7 @@ import (
 
 func main() {
 	var (
-		log    = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		log    = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 		ctx    = context.Background()
 		svrErr = make(chan error)
 		c      = make(chan os.Signal, 1)
