@@ -57,6 +57,7 @@ services:
     volumes:
       - ./cfg/grafana.yml:/etc/grafana/provisioning/datasources/datasource.yaml
       - ./grafana-data:/var/lib/grafana
+      - ./cfg/dashboards:/etc/grafana/provisioning/dashboards
     ports:
       - 3000:3000
     networks:
