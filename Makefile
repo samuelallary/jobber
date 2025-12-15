@@ -26,4 +26,4 @@ init: build migrate-up
 
 .PHONY: build
 build:
-	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) docker compose up -d
+	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) docker compose up -d --build
