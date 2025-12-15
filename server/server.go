@@ -16,7 +16,6 @@ import (
 	"github.com/alwedo/jobber/db"
 	"github.com/alwedo/jobber/jobber"
 	"github.com/alwedo/jobber/metrics"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -35,15 +34,6 @@ const (
 
 //go:embed assets/*
 var assets embed.FS
-
-var httpRequests = prometheus.NewHistogramVec(
-	prometheus.HistogramOpts{
-		Name:    "http_requests_seconds",
-		Help:    "Duration, method, path, code.",
-		Buckets: prometheus.DefBuckets,
-	},
-	[]string{"method", "path", "code"},
-)
 
 type server struct {
 	logger    *slog.Logger
