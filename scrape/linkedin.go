@@ -12,11 +12,13 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/alwedo/jobber/db"
+	"github.com/alwedo/jobber/metrics"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
 	linkedInURL      = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+	linkedInName     = "LinkedIn"
 	paramKeywords    = "keywords" // Search keywords, ie. "golang"
 	paramLocation    = "location" // Location of the search, ie. "Berlin"
 	paramStart       = "start"    // Start of the pagination, in intervals of 10s, ie. "10"
@@ -39,6 +41,7 @@ func LinkedIn() *linkedIn { //nolint: revive
 // It will paginate over the search results until it doesn't find any more offers,
 // Scrape the data and return a slice of offers ready to be added to the DB.
 func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOfferParams, error) {
+	t := time.Now()
 	var totalOffers []db.CreateOfferParams
 	var offers []db.CreateOfferParams
 
@@ -64,6 +67,12 @@ func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOffe
 			break
 		}
 	}
+	metrics.ScrapeAction.WithLabelValues(
+		linkedInName,
+		query.Keywords,
+		query.Location,
+		strconv.Itoa(len(totalOffers)),
+	).Observe(time.Since(t).Seconds())
 
 	return totalOffers, nil
 }
