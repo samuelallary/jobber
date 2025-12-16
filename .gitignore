@@ -1,4 +1,5 @@
 .DS_Store
+.env
 jobber.log
 postgres-data
 prometheus-data
