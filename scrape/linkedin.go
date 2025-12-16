@@ -22,8 +22,9 @@ const (
 	paramStart       = "start"    // Start of the pagination, in intervals of 10s, ie. "10"
 	paramFTPR        = "f_TPR"    // Time Posted Range. Values are in seconds, starting with 'r', ie. r86400 = Past 24 hours
 	searchInterval   = 10         // LinkedIn pagination interval
+	maxSearchInt     = 1000       // LinkedIn's site returns StatusBadRequest if 'start=1000'
+	maxRetries       = 5          // Exponential backoff limit.
 	oneWeekInSeconds = 604800
-	maxRetries       = 5 // Exponential backoff limit.
 )
 
 type linkedIn struct {
@@ -41,7 +42,7 @@ func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOffe
 	var totalOffers []db.CreateOfferParams
 	var offers []db.CreateOfferParams
 
-	for i := 0; i == 0 || len(offers) == searchInterval; i += searchInterval {
+	for i := 0; i < maxSearchInt; i += searchInterval {
 		select {
 		case <-ctx.Done():
 			return totalOffers, fmt.Errorf("linkedIn.Scrape process was canceled: %w", ctx.Err())
@@ -56,6 +57,11 @@ func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOffe
 				return nil, fmt.Errorf("failed to parseLinkedInBody body linkedIn.Scrape: %v", err)
 			}
 			totalOffers = append(totalOffers, offers...)
+		}
+		// LinkedIn returns batches of 10 offers. If a batch has 10
+		// offers we assume there is a next page, otherwise we stop.
+		if len(offers) != searchInterval {
+			break
 		}
 	}
 
