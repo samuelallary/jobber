@@ -1,9 +1,9 @@
 package scrape
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,14 +30,14 @@ type linkedIn struct {
 	client *http.Client
 }
 
-func LinkedIn(logger *slog.Logger) *linkedIn { //nolint: revive
+func LinkedIn() *linkedIn { //nolint: revive
 	return &linkedIn{client: http.DefaultClient}
 }
 
 // search runs a linkedin search based on a query.
 // It will paginate over the search results until it doesn't find any more offers,
 // Scrape the data and return a slice of offers ready to be added to the DB.
-func (l *linkedIn) Scrape(query *db.Query) ([]db.CreateOfferParams, error) {
+func (l *linkedIn) Scrape(_ context.Context, query *db.Query) ([]db.CreateOfferParams, error) {
 	var totalOffers []db.CreateOfferParams
 	var offers []db.CreateOfferParams
 

@@ -1,6 +1,7 @@
 package scrape
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -174,7 +175,7 @@ func TestScrape(t *testing.T) {
 	t.Run("expected behaviour", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			query := &db.Query{Keywords: "golang", Location: "the moon"}
-			offers, err := l.Scrape(query)
+			offers, err := l.Scrape(context.Background(), query)
 			if err != nil {
 				t.Errorf("expected no error, got %v", err)
 			}
@@ -187,7 +188,7 @@ func TestScrape(t *testing.T) {
 	t.Run("too many retries don't discard data", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			query := &db.Query{Keywords: "retry-fail", Location: "the moon"}
-			offers, err := l.Scrape(query)
+			offers, err := l.Scrape(context.Background(), query)
 			if !errors.Is(err, ErrRetryable) {
 				t.Errorf("expected ErrRetryable, got: %v", err)
 			}

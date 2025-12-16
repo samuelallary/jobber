@@ -31,7 +31,7 @@ type Jobber struct {
 }
 
 func New(log *slog.Logger, db *db.Queries) (*Jobber, func()) {
-	return NewConfigurableJobber(log, db, scrape.LinkedIn(log))
+	return NewConfigurableJobber(log, db, scrape.LinkedIn())
 }
 
 func NewConfigurableJobber(log *slog.Logger, db *db.Queries, s scrape.Scraper) (*Jobber, func()) {
@@ -39,8 +39,9 @@ func NewConfigurableJobber(log *slog.Logger, db *db.Queries, s scrape.Scraper) (
 	if err != nil {
 		log.Error("failed to create scheduler", slog.String("error", err.Error()))
 	}
+	ctx, cancelCtx := context.WithCancel(context.Background())
 	j := &Jobber{
-		ctx:    context.Background(),
+		ctx:    ctx,
 		scpr:   s,
 		logger: log,
 		db:     db,
@@ -59,6 +60,7 @@ func NewConfigurableJobber(log *slog.Logger, db *db.Queries, s scrape.Scraper) (
 	j.sched.Start()
 
 	return j, func() {
+		cancelCtx()
 		if err := j.sched.Shutdown(); err != nil {
 			j.logger.Error("failed to shutdown scheduler", slog.String("error", err.Error()))
 		}
@@ -147,8 +149,7 @@ func (j *Jobber) runQuery(qID int64) {
 		return
 	}
 
-	// TODO: extend ctx to scraper
-	offers, err := j.scpr.Scrape(q)
+	offers, err := j.scpr.Scrape(j.ctx, q)
 	if err != nil {
 		if errors.Is(err, scrape.ErrRetryable) {
 			// Retryable errors still bring data. We log a warning for further analysis and continue.
