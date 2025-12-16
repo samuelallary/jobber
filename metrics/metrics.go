@@ -54,10 +54,10 @@ var (
 	)
 
 	// Labels: "portal", "keywords", "location", itemCount
-	ScrapeAction = prometheus.NewHistogramVec(
+	ScraperJob = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "scrape_duration",
-			Help:    "Scraper action information.",
+			Name:    "scraper_job_seconds",
+			Help:    "Scraper Job information.",
 			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"portal", "keywords", "location", "itemCount"},
@@ -71,7 +71,7 @@ func Init() {
 		httpRequestsInFlight,
 		JobberScheduledQueries,
 		JobberNewQueries,
-		ScrapeAction,
+		ScraperJob,
 	)
 }
 

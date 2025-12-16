@@ -67,7 +67,7 @@ func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOffe
 			break
 		}
 	}
-	metrics.ScrapeAction.WithLabelValues(
+	metrics.ScraperJob.WithLabelValues(
 		linkedInName,
 		query.Keywords,
 		query.Location,
