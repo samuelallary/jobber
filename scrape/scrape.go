@@ -4,6 +4,7 @@
 package scrape
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type Scraper interface {
-	Scrape(*db.Query) ([]db.CreateOfferParams, error)
+	Scrape(context.Context, *db.Query) ([]db.CreateOfferParams, error)
 }
 
 var ErrRetryable = errors.New("scrape: retryable error")
@@ -30,13 +31,9 @@ type mockScraper struct {
 	LastQuery *db.Query
 }
 
-func (m *mockScraper) Scrape(q *db.Query) ([]db.CreateOfferParams, error) {
-	o := []db.CreateOfferParams{}
+func (m *mockScraper) Scrape(_ context.Context, q *db.Query) ([]db.CreateOfferParams, error) {
 	m.LastQuery = q
-	if q.Keywords == "retry" {
-		return o, ErrRetryable
-	}
-	return o, nil
+	return []db.CreateOfferParams{}, nil
 }
 
 var MockScraper = &mockScraper{}

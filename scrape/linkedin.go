@@ -1,9 +1,9 @@
 package scrape
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,56 +12,74 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/alwedo/jobber/db"
+	"github.com/alwedo/jobber/metrics"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
 	linkedInURL      = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+	linkedInName     = "LinkedIn"
 	paramKeywords    = "keywords" // Search keywords, ie. "golang"
 	paramLocation    = "location" // Location of the search, ie. "Berlin"
 	paramStart       = "start"    // Start of the pagination, in intervals of 10s, ie. "10"
 	paramFTPR        = "f_TPR"    // Time Posted Range. Values are in seconds, starting with 'r', ie. r86400 = Past 24 hours
 	searchInterval   = 10         // LinkedIn pagination interval
+	maxSearchInt     = 1000       // LinkedIn's site returns StatusBadRequest if 'start=1000'
+	maxRetries       = 5          // Exponential backoff limit.
 	oneWeekInSeconds = 604800
 )
 
 type linkedIn struct {
 	client *http.Client
-	logger *slog.Logger
 }
 
-func LinkedIn(logger *slog.Logger) *linkedIn { //nolint: revive
-	return &linkedIn{
-		client: &http.Client{Timeout: 10 * time.Second},
-		logger: logger,
-	}
+func LinkedIn() *linkedIn { //nolint: revive
+	return &linkedIn{client: http.DefaultClient}
 }
 
 // search runs a linkedin search based on a query.
 // It will paginate over the search results until it doesn't find any more offers,
 // Scrape the data and return a slice of offers ready to be added to the DB.
-func (l *linkedIn) Scrape(query *db.Query) ([]db.CreateOfferParams, error) {
+func (l *linkedIn) Scrape(ctx context.Context, query *db.Query) ([]db.CreateOfferParams, error) {
+	t := time.Now()
 	var totalOffers []db.CreateOfferParams
 	var offers []db.CreateOfferParams
 
-	for i := 0; i == 0 || len(offers) == searchInterval; i += searchInterval {
-		resp, err := l.fetchOffersPage(query, i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetchOffersPage in linkedIn.search: %v", err)
+	for i := 0; i < maxSearchInt; i += searchInterval {
+		select {
+		case <-ctx.Done():
+			return totalOffers, fmt.Errorf("linkedIn.Scrape process was canceled: %w", ctx.Err())
+		default:
+			resp, err := l.fetchOffersPage(ctx, query, i)
+			if err != nil {
+				// If fetchOffersPage fails we return the accumulated offers so far.
+				return totalOffers, fmt.Errorf("failed to fetchOffersPage in linkedIn.Scrape: %w", err)
+			}
+			offers, err = l.parseLinkedInBody(resp)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parseLinkedInBody body linkedIn.Scrape: %v", err)
+			}
+			totalOffers = append(totalOffers, offers...)
 		}
-		offers, err = l.parseLinkedInBody(resp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parseLinkedInBody body linkedIn.search: %v", err)
+		// LinkedIn returns batches of 10 offers. If a batch has 10
+		// offers we assume there is a next page, otherwise we stop.
+		if len(offers) != searchInterval {
+			break
 		}
-		totalOffers = append(totalOffers, offers...)
 	}
+	metrics.ScraperJob.WithLabelValues(
+		linkedInName,
+		query.Keywords,
+		query.Location,
+		strconv.Itoa(len(totalOffers)),
+	).Observe(time.Since(t).Seconds())
 
 	return totalOffers, nil
 }
 
 // fetchOffersPage gets job offers from LinkedIn based on the passed query params.
 // This returns a list of max 10 elements. We move the start by increments of 10.
-func (l *linkedIn) fetchOffersPage(query *db.Query, start int) (io.ReadCloser, error) {
+func (l *linkedIn) fetchOffersPage(ctx context.Context, query *db.Query, start int) (io.ReadCloser, error) {
 	qp := url.Values{}
 	qp.Add(paramKeywords, query.Keywords)
 	qp.Add(paramLocation, query.Location)
@@ -78,32 +96,47 @@ func (l *linkedIn) fetchOffersPage(query *db.Query, start int) (io.ReadCloser, e
 	}
 	qp.Add(paramFTPR, fmt.Sprintf("r%d", ftpr))
 
-	// When creating new queries with a week of job offers we might hit LinkedIn's
-	// API rate limit. To avoid that we add a bit of a delay after the first http call.
-	if ftpr == oneWeekInSeconds && start != 0 {
-		time.Sleep(200 * time.Millisecond)
-	}
-
 	url, err := url.Parse(linkedInURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	url.RawQuery = qp.Encode()
 
-	resp, err := l.client.Get(url.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		if isRetryable[resp.StatusCode] {
-			return nil, ErrRetryable
+
+	// Exponential backoff
+	var (
+		retry   = true
+		retries int
+		resp    = &http.Response{}
+		cErr    error
+	)
+
+	for retry {
+		resp, cErr = l.client.Do(req)
+		if cErr != nil {
+			return nil, fmt.Errorf("failed to fetch URL: %w", err)
 		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read response body: %w", err)
+		if resp.StatusCode != http.StatusOK {
+			if isRetryable[resp.StatusCode] {
+				if retries == maxRetries {
+					return nil, fmt.Errorf("%w with %w", ErrRetryable, err)
+				}
+				time.Sleep(time.Duration(retries * int(time.Second)))
+				retries++
+				continue
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("unable to read response body: %w", err)
+			}
+			defer resp.Body.Close()
+			return nil, fmt.Errorf("received status code: %d, url: %s, message: %s", resp.StatusCode, url.String(), string(body))
 		}
-		defer resp.Body.Close()
-		return nil, fmt.Errorf("received status code: %d, message: %s", resp.StatusCode, string(body))
+		retry = false
 	}
 	return resp.Body, nil
 }
@@ -140,18 +173,10 @@ func (l *linkedIn) parseLinkedInBody(body io.ReadCloser) ([]db.CreateOfferParams
 
 			// Extract Posted Date
 			postedAt, _ := s.Find("time").Attr("datetime")
-			t, err := time.Parse("2006-01-02", postedAt)
-			if err != nil {
-				l.logger.Error("unable to parse datetime for job ID ", job.ID, slog.String("error", err.Error()))
-			}
+			t, _ := time.Parse("2006-01-02", postedAt) //nolint: errcheck
 			job.PostedAt = pgtype.Timestamptz{Time: t, Valid: true}
 
-			// Only add if we have essential data
-			if job.ID != "" && job.Title != "" {
-				jobs = append(jobs, job)
-			} else {
-				l.logger.Error("Missing essential data for job ID", slog.String("jobID", job.ID))
-			}
+			jobs = append(jobs, job)
 		}
 	})
 
