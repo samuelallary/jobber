@@ -258,7 +258,7 @@
             "uid": "PEF57EC2B9BFC4715"
           },
           "editorMode": "code",
-          "expr": "jobber_new_queries",
+          "expr": "sum(jobber_new_queries)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
